@@ -36,9 +36,19 @@ Claude Code だけを頭脳にして、ブラウザで英会話と添削を行�
 | ツール | 内容 |
 |---|---|
 | `start_session({scenario, level})` | 画面の初期化 |
-| `say_and_listen({reply, feedback, good})` | FB を表示 → reply を読み上げ → 発言を待って書き起こしを返す |
-| `listen()` | 発言をさらに待つ |
+| `say_and_listen({reply, reply_ja, feedback, good})` | FB を表示 → reply を読み上げ（reply_ja は「訳」ボタンで表示）→ 次のイベントを待って返す |
+| `listen()` | 次のイベントをさらに待つ |
+| `answer_lookup({id, meaning})` | 選択された表現の意味をポップアップに表示 |
 | `end_session({summary})` | まとめを表示 |
+
+ページから返るイベント: `reply`（発言。`intent_ja` = 先に日本語で書いた言いたいこと）/ `lookup`（表現の意味を知りたい）/ `waiting` / `stopped`。
+
+## ページの操作
+
+- AI の発言の「訳」で日本語訳、一部を選択すると意味をポップアップ（ハイライトは残る）
+- 音声は入力欄に入る。「自動送信」がオンなら話し終わりで送信。入力欄を手で触るとそのターンだけ自動送信オフ
+- ✕（または Esc）で入力中の内容を消す
+- 🇯🇵 で先に日本語で言いたいことを記録 → EN で英語に切り替えて話す
 
 webmcp のブリッジはツール呼び出しを 30 秒で打ち切るため、待つツールは 25 秒で `status: "waiting"` を返し、Claude が `listen` で待ち直す。
 

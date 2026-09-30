@@ -38,10 +38,23 @@
   <section class="chat">
     <div id="log" class="log"></div>
     <div class="live">
-      <div id="interim" class="interim muted">…</div>
-      <form id="typeForm">
-        <input id="typeInput" placeholder="話す代わりに入力して Enter" autocomplete="off">
+      <div id="memo" class="memo" hidden>
+        <span class="memoLabel">🇯🇵</span>
+        <input id="memoInput" placeholder="日本語で伝えたいこと（話すか入力）" autocomplete="off">
+        <button type="button" id="memoClear" class="icon" title="日本語メモを消す">✕</button>
+      </div>
+      <form id="typeForm" class="composer">
+        <button type="button" id="jaBtn" class="icon" title="先に日本語で伝えたいことを記録する">🇯🇵</button>
+        <input id="typeInput" placeholder="話すとここに入ります（入力も可）" autocomplete="off">
+        <button type="button" id="clearBtn" class="icon" title="入力を消す（Esc）">✕</button>
+        <button type="submit" id="sendBtn" class="primary" title="送信（Enter）">送信</button>
       </form>
+      <div class="liveFoot">
+        <span id="hint" class="muted"></span>
+        <label class="auto" title="話し終わったら自動で送信。入力欄を手で触るとそのターンだけオフ">
+          <input type="checkbox" id="autoSend" checked> 自動送信
+        </label>
+      </div>
     </div>
   </section>
   <aside class="fb">
@@ -49,6 +62,11 @@
     <div id="fbList" class="fbList"><p class="muted">あなたの発言への指摘がここに出ます</p></div>
   </aside>
 </main>
+</div>
+
+<div id="popup" class="popup" hidden>
+  <div id="popupPhrase" class="popupPhrase"></div>
+  <div id="popupBody"></div>
 </div>
 
 <div id="summary" class="summary" hidden>

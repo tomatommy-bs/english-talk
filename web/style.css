@@ -11,6 +11,7 @@
   --grammar: #d9443b;
   --natural: #d98a1b;
   --advanced: #3b9c6a;
+  --hl: #ffe98a;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -26,6 +27,7 @@
     --grammar: #ff6b61;
     --natural: #f2b04d;
     --advanced: #5fcf94;
+    --hl: #6b5a12;
   }
 }
 
@@ -54,7 +56,7 @@ body {
 .controls { display: flex; gap: 14px; align-items: center; margin-left: auto; }
 .controls label { display: flex; gap: 6px; align-items: center; font-size: 13px; }
 select, input, button { font: inherit; color: inherit; }
-select, #typeInput {
+select {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -98,14 +100,48 @@ main {
 .msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; position: relative; }
 .msg.ai { background: var(--ai); align-self: flex-start; }
 .msg.me { background: var(--me); align-self: flex-end; }
-.msg .replay { border: none; background: none; padding: 0 0 0 6px; opacity: .6; }
-.msg .replay:hover { opacity: 1; }
+.msg .tools { margin-left: 6px; white-space: nowrap; }
+.msg .tools button { border: none; background: none; padding: 0 3px; opacity: .55; font-size: 13px; }
+.msg .tools button:hover, .msg .tools button[data-on="true"] { opacity: 1; }
+.msg .ja, .msg .intent { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.msg.ai .text { user-select: text; cursor: text; }
+mark.hl { background: var(--hl); color: inherit; border-radius: 3px; padding: 0 1px; cursor: pointer; }
+mark.hl.pending { outline: 1px dashed var(--accent); }
 .msg .marks { font-size: 12px; margin-top: 2px; }
 .msg.me.flash { outline: 2px solid var(--accent); }
 
-.live { border-top: 1px solid var(--line); padding: 10px 16px; background: var(--surface); }
-.interim { min-height: 1.6em; font-style: italic; }
-#typeInput { width: 100%; margin-top: 6px; }
+.live { border-top: 1px solid var(--line); padding: 10px 16px; background: var(--surface); display: flex; flex-direction: column; gap: 6px; }
+.composer, .memo { display: flex; gap: 6px; align-items: center; }
+.memo[hidden] { display: none; }
+.composer input, .memo input { flex: 1; min-width: 0; }
+#typeInput, #memoInput {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.memo input { border-style: dashed; }
+.memoLabel { width: 34px; text-align: center; }
+button.icon { width: 34px; padding: 4px 0; }
+button.icon[data-on="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-size: 12px; font-weight: 600; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.liveFoot { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.auto { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
+
+.popup {
+  position: fixed;
+  z-index: 10;
+  max-width: min(360px, calc(100vw - 16px));
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / .18);
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+.popup[hidden] { display: none; }
+.popupPhrase { font-weight: 600; margin-bottom: 2px; }
 
 .fb { overflow-y: auto; padding: 16px; }
 .fb h2 { font-size: 14px; margin: 0 0 10px; color: var(--muted); }

@@ -8,9 +8,11 @@ const KOKORO_VOICE = "af_heart";
 
 const $ = (id) => document.getElementById(id);
 const ui = {
-  log: $("log"), interim: $("interim"), fbList: $("fbList"), state: $("state"), mcp: $("mcp"),
+  log: $("log"), fbList: $("fbList"), state: $("state"), mcp: $("mcp"), hint: $("hint"),
   scenario: $("scenario"), ttsEngine: $("ttsEngine"), silence: $("silence"), silenceVal: $("silenceVal"),
-  stopBtn: $("stopBtn"), typeForm: $("typeForm"), typeInput: $("typeInput"),
+  stopBtn: $("stopBtn"), typeForm: $("typeForm"), typeInput: $("typeInput"), clearBtn: $("clearBtn"),
+  autoSend: $("autoSend"), jaBtn: $("jaBtn"), memo: $("memo"), memoInput: $("memoInput"), memoClear: $("memoClear"),
+  popup: $("popup"), popupPhrase: $("popupPhrase"), popupBody: $("popupBody"),
   summary: $("summary"), summaryText: $("summaryText"), summaryClose: $("summaryClose"),
 };
 
@@ -131,48 +133,81 @@ async function speak(text) {
   return speakOs(text);
 }
 
-// ---------- 聞き取り ----------
-// 認識した発話はキューに入れ、listen 系ツールが取り出す。ツールの 25 秒枠をまたいでも発話は失われない。
-const utterances = [];
+
+// ---------- ページ → Claude のイベント ----------
+// 発言や「意味を調べて」はキューに入れ、listen 系ツールが取り出す。ツールの 25 秒枠をまたいでも失われない。
+const events = [];
 let waiter = null;
 let stopped = false;
-let micWanted = false;
-let recognition = null;
-let pending = { finals: [], alternatives: [], lowConfidence: [], startedAt: 0 };
-let silenceTimer = null;
 
 function deliver(item) {
-  if (waiter) { const w = waiter; waiter = null; w(item); } else utterances.push(item);
+  if (waiter) { const w = waiter; waiter = null; w(item); } else events.push(item);
 }
 
-function resetPending() {
-  pending = { finals: [], alternatives: [], lowConfidence: [], startedAt: 0 };
+function waitEvent(deadline) {
+  if (stopped) return Promise.resolve(stoppedEvent());
+  if (events.length) return Promise.resolve(events.shift());
+  if (Date.now() >= deadline) return Promise.resolve(waitingEvent());
+  return new Promise((resolve) => {
+    const t = setTimeout(() => {
+      if (waiter === done) waiter = null;
+      resolve(waitingEvent());
+    }, Math.max(0, deadline - Date.now()));
+    const done = (item) => { clearTimeout(t); resolve(item); };
+    waiter = done;
+  });
 }
 
-function flushUtterance() {
+const waitingEvent = () => ({ status: "waiting", user_is_speaking: !!ui.typeInput.value.trim() || !!ui.memoInput.value.trim() });
+const stoppedEvent = () => ({ status: "stopped", lookups: lookupList() });
+
+// ---------- 入力欄（音声は入力欄を埋めるだけ。送信は自動送信か手動） ----------
+let micWanted = false;
+let recognition = null;
+let jaMode = false;
+let silenceTimer = null;
+// 音声で確定した文字列（入力欄ごと）。ユーザーが手で直したら、その時点の中身を確定分とみなす
+const committed = new Map([[ui.typeInput, ""], [ui.memoInput, ""]]);
+let voice = freshVoice();
+
+function freshVoice() {
+  return { used: false, edited: false, alternatives: [], lowConfidence: [], startedAt: 0 };
+}
+
+const targetField = () => (jaMode ? ui.memoInput : ui.typeInput);
+
+function showInField(field, interim) {
+  const base = committed.get(field);
+  field.value = interim ? `${base}${base ? " " : ""}${interim}` : base;
+}
+
+// 自動送信: チェックボックスはユーザーの設定。手で入力欄を触ったターンだけ一時的にオフにする
+let autoSendPref = loadPref("autoSend", "true") === "true";
+ui.autoSend.checked = autoSendPref;
+ui.autoSend.addEventListener("change", () => {
+  autoSendPref = ui.autoSend.checked;
+  savePref("autoSend", String(autoSendPref));
+});
+
+function interruptAutoSend() {
   clearTimeout(silenceTimer);
-  if (!pending.finals.length) return;
-  const text = pending.finals.join(" ").replace(/\s+/g, " ").trim();
-  const item = {
-    status: "reply",
-    text,
-    alternatives: pending.alternatives.filter((a) => a && a !== text).slice(0, 3),
-    low_confidence_segments: pending.lowConfidence,
-    duration_ms: Date.now() - pending.startedAt,
-    input: "voice",
-  };
-  resetPending();
-  ui.interim.textContent = "…";
-  addMessage("me", text);
-  setState("thinking");
-  micOff();
-  deliver(item);
+  ui.autoSend.checked = false;
+}
+
+for (const field of [ui.typeInput, ui.memoInput]) {
+  field.addEventListener("input", () => {
+    committed.set(field, field.value);
+    if (field === ui.typeInput) {
+      if (voice.used) voice.edited = true;
+      interruptAutoSend();
+    }
+  });
 }
 
 function setupRecognition() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
-    ui.interim.textContent = "このブラウザは音声認識に対応していません（Chrome 推奨）。下の入力欄を使ってください。";
+    setHint("このブラウザは音声認識に対応していません（Chrome 推奨）。入力欄を使ってください。");
     return null;
   }
   const r = new SR();
@@ -181,36 +216,42 @@ function setupRecognition() {
   r.interimResults = true;
   r.maxAlternatives = 3;
   r.onresult = (ev) => {
-    if (!pending.startedAt) pending.startedAt = Date.now();
+    const field = targetField();
     let interim = "";
     for (let i = ev.resultIndex; i < ev.results.length; i++) {
       const res = ev.results[i];
-      if (res.isFinal) {
-        const best = res[0];
-        pending.finals.push(best.transcript.trim());
+      if (!res.isFinal) { interim += res[0].transcript; continue; }
+      const best = res[0].transcript.trim();
+      const before = committed.get(field);
+      committed.set(field, `${before}${before ? " " : ""}${best}`);
+      if (field === ui.typeInput) {
+        voice.used = true;
+        if (!voice.startedAt) voice.startedAt = Date.now();
         // 各区切りの第二候補を、他の区切りは第一候補のまま差し込んで「別の聞こえ方」を作る
         for (let k = 1; k < res.length; k++) {
-          pending.alternatives.push([...pending.finals.slice(0, -1), res[k].transcript.trim()].join(" "));
+          voice.alternatives.push(`${before}${before ? " " : ""}${res[k].transcript.trim()}`);
         }
-        if (best.confidence > 0 && best.confidence < 0.75) {
-          pending.lowConfidence.push({ text: best.transcript.trim(), confidence: Number(best.confidence.toFixed(2)) });
-        }
-      } else {
-        interim += res[0].transcript;
+        const c = res[0].confidence;
+        if (c > 0 && c < 0.75) voice.lowConfidence.push({ text: best, confidence: Number(c.toFixed(2)) });
       }
     }
-    ui.interim.textContent = [...pending.finals, interim].join(" ") || "…";
+    showInField(field, interim.trim());
     clearTimeout(silenceTimer);
     // 途中結果が残っている間は話し中とみなし、確定分があって無音が続いたら話し終わり
-    if (!interim && pending.finals.length) silenceTimer = setTimeout(flushUtterance, silenceMs());
-    else if (interim) silenceTimer = setTimeout(() => { if (pending.finals.length) flushUtterance(); }, silenceMs() + 1500);
+    if (!jaMode && ui.autoSend.checked && committed.get(ui.typeInput)) {
+      silenceTimer = setTimeout(() => sendReply(), silenceMs() + (interim ? 1500 : 0));
+    }
   };
   r.onerror = (ev) => {
-    if (ev.error === "not-allowed") ui.interim.textContent = "マイクが許可されていません。下の入力欄も使えます。";
+    if (ev.error === "not-allowed") setHint("マイクが許可されていません。入力欄も使えます。");
     else if (ev.error !== "no-speech" && ev.error !== "aborted") console.warn("[english-talk] recognition error", ev.error);
   };
-  // Chrome は無音が続くと勝手に止まるので、聞くべき間は再開する
-  r.onend = () => { if (micWanted) try { r.start(); } catch { /* 既に開始済み */ } };
+  // Chrome は無音が続くと勝手に止まるので、聞くべき間は再開する。言語を切り替えたときもここで開き直す
+  r.onend = () => {
+    if (!micWanted) return;
+    r.lang = jaMode ? "ja-JP" : "en-US";
+    try { r.start(); } catch { /* 既に開始済み */ }
+  };
   return r;
 }
 
@@ -219,42 +260,83 @@ function micOn() {
   recognition ??= setupRecognition();
   micWanted = true;
   setState("listening");
-  ui.interim.textContent = "…";
-  if (recognition) try { recognition.start(); } catch { /* 既に開始済み */ }
+  if (recognition) {
+    recognition.lang = jaMode ? "ja-JP" : "en-US";
+    try { recognition.start(); } catch { /* 既に開始済み */ }
+  }
 }
 
 function micOff() {
   micWanted = false;
+  clearTimeout(silenceTimer);
   if (recognition) try { recognition.abort(); } catch { /* 未開始 */ }
 }
 
-function waitUtterance(deadline) {
-  if (stopped) return Promise.resolve({ status: "stopped" });
-  if (utterances.length) return Promise.resolve(utterances.shift());
-  if (Date.now() >= deadline) return Promise.resolve({ status: "waiting", user_is_speaking: false });
-  return new Promise((resolve) => {
-    const ms = Math.max(0, deadline - Date.now());
-    const t = setTimeout(() => {
-      if (waiter === done) waiter = null;
-      const speakingNow = pending.finals.length > 0 || ui.interim.textContent !== "…";
-      resolve({ status: "waiting", user_is_speaking: speakingNow });
-    }, ms);
-    const done = (item) => { clearTimeout(t); resolve(item); };
-    waiter = done;
-  });
+// 認識途中の音声を捨てて聞き直す（abort すると onend で再開する）
+function restartMic() {
+  if (micWanted && recognition) try { recognition.abort(); } catch { /* 未開始 */ }
 }
 
-ui.typeForm.addEventListener("submit", (ev) => {
-  ev.preventDefault();
+function setHint(text) { ui.hint.textContent = text; }
+
+function clearInput() {
+  committed.set(ui.typeInput, "");
+  ui.typeInput.value = "";
+  voice = freshVoice();
+  clearTimeout(silenceTimer);
+  restartMic();
+}
+
+function setJaMode(on) {
+  jaMode = on;
+  clearTimeout(silenceTimer);
+  ui.jaBtn.dataset.on = String(on);
+  ui.jaBtn.textContent = on ? "EN" : "🇯🇵";
+  ui.jaBtn.title = on ? "英語で話す" : "先に日本語で伝えたいことを記録する";
+  if (on) ui.memo.hidden = false;
+  setHint(on ? "日本語で伝えたいことを話してください。終わったら EN で英語へ" : "");
+  restartMic();
+  (on ? ui.memoInput : ui.typeInput).focus({ preventScroll: true });
+}
+
+function sendReply() {
+  clearTimeout(silenceTimer);
+  if (jaMode) setJaMode(false);
   const text = ui.typeInput.value.trim();
   if (!text) return;
+  const intent = ui.memoInput.value.trim();
+  const item = {
+    status: "reply",
+    text,
+    input: !voice.used ? "typed" : voice.edited ? "voice_edited" : "voice",
+  };
+  if (voice.used && !voice.edited) {
+    item.alternatives = voice.alternatives.filter((a) => a && a !== text).slice(0, 3);
+    item.low_confidence_segments = voice.lowConfidence;
+  }
+  if (intent) item.intent_ja = intent;
+  addMessage("me", text, intent);
+  committed.set(ui.typeInput, "");
+  committed.set(ui.memoInput, "");
   ui.typeInput.value = "";
-  resetPending();
-  clearTimeout(silenceTimer);
-  addMessage("me", text);
+  ui.memoInput.value = "";
+  ui.memo.hidden = true;
+  voice = freshVoice();
+  ui.autoSend.checked = autoSendPref;
   setState("thinking");
   micOff();
-  deliver({ status: "reply", text, alternatives: [], low_confidence_segments: [], input: "typed" });
+  deliver(item);
+}
+
+ui.typeForm.addEventListener("submit", (ev) => { ev.preventDefault(); sendReply(); });
+ui.clearBtn.addEventListener("click", clearInput);
+ui.typeInput.addEventListener("keydown", (ev) => { if (ev.key === "Escape") clearInput(); });
+ui.jaBtn.addEventListener("click", () => setJaMode(!jaMode));
+ui.memoClear.addEventListener("click", () => {
+  committed.set(ui.memoInput, "");
+  ui.memoInput.value = "";
+  if (!jaMode) ui.memo.hidden = true;
+  restartMic();
 });
 
 ui.stopBtn.addEventListener("click", () => {
@@ -266,30 +348,55 @@ ui.stopBtn.addEventListener("click", () => {
     speechSynthesis.cancel();
     try { currentSource?.stop(); } catch { /* 再生していない */ }
     setState("stopped");
-    deliver({ status: "stopped" });
+    deliver(stoppedEvent());
   } else {
-    utterances.length = 0;
+    events.length = 0;
     micOn();
   }
 });
 
-// ---------- 画面 ----------
+// ---------- 会話ログ ----------
 let lastMine = null;
 
-function addMessage(who, text) {
+function addMessage(who, text, sub) {
   const el = document.createElement("div");
   el.className = `msg ${who}`;
   const body = document.createElement("span");
+  body.className = "text";
   body.textContent = text;
   el.append(body);
   if (who === "ai") {
-    const b = document.createElement("button");
-    b.className = "replay";
-    b.title = "もう一度聞く";
-    b.textContent = "🔊";
-    b.addEventListener("click", () => speak(text));
-    el.append(b);
+    const tools = document.createElement("span");
+    tools.className = "tools";
+    const replay = document.createElement("button");
+    replay.title = "もう一度聞く";
+    replay.textContent = "🔊";
+    replay.addEventListener("click", () => speak(text));
+    tools.append(replay);
+    if (sub) {
+      const ja = document.createElement("div");
+      ja.className = "ja";
+      ja.textContent = sub;
+      ja.hidden = true;
+      const tr = document.createElement("button");
+      tr.title = "日本語訳";
+      tr.textContent = "訳";
+      tr.addEventListener("click", () => {
+        ja.hidden = !ja.hidden;
+        tr.dataset.on = String(!ja.hidden);
+      });
+      tools.append(tr);
+      el.append(tools, ja);
+    } else {
+      el.append(tools);
+    }
   } else {
+    if (sub) {
+      const intent = document.createElement("div");
+      intent.className = "intent";
+      intent.textContent = `🇯🇵 ${sub}`;
+      el.append(intent);
+    }
     lastMine = el;
   }
   ui.log.append(el);
@@ -297,6 +404,65 @@ function addMessage(who, text) {
   return el;
 }
 
+// ---------- 選択した表現の意味（ハイライトは残す） ----------
+const lookups = new Map(); // id → { mark, phrase, meaning }
+let lookupSeq = 0;
+let popupFor = null;
+
+function lookupList() {
+  return [...lookups.values()].filter((l) => l.meaning).map((l) => ({ phrase: l.phrase, meaning: l.meaning }));
+}
+
+function showPopup(id) {
+  const l = lookups.get(id);
+  if (!l) return;
+  popupFor = id;
+  ui.popupPhrase.textContent = l.phrase;
+  ui.popupBody.textContent = l.meaning ?? (stopped ? "停止中は調べられません" : "調べています…");
+  ui.popup.hidden = false;
+  const r = l.mark.getBoundingClientRect();
+  const w = ui.popup.offsetWidth;
+  ui.popup.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left))}px`;
+  ui.popup.style.top = `${r.bottom + 6}px`;
+}
+
+function hidePopup() {
+  ui.popup.hidden = true;
+  popupFor = null;
+}
+
+ui.log.addEventListener("mouseup", () => {
+  const sel = getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  const host = range.commonAncestorContainer.parentElement?.closest(".msg.ai .text");
+  const phrase = sel.toString().trim();
+  if (!host || !phrase || phrase.length > 120) return;
+  const mark = document.createElement("mark");
+  try {
+    range.surroundContents(mark); // 既存のハイライトをまたぐ選択は包めないので無視する
+  } catch {
+    return;
+  }
+  sel.removeAllRanges();
+  const id = `l${++lookupSeq}`;
+  mark.dataset.id = id;
+  mark.className = "hl pending";
+  lookups.set(id, { mark, phrase, meaning: null });
+  showPopup(id);
+  if (!stopped) deliver({ status: "lookup", id, phrase, sentence: host.textContent });
+});
+
+ui.log.addEventListener("click", (ev) => {
+  const mark = ev.target.closest("mark.hl");
+  if (mark) { ev.stopPropagation(); showPopup(mark.dataset.id); }
+});
+document.addEventListener("mousedown", (ev) => {
+  if (!ui.popup.hidden && !ui.popup.contains(ev.target) && !ev.target.closest("mark.hl")) hidePopup();
+});
+ui.log.addEventListener("scroll", hidePopup);
+
+// ---------- フィードバック ----------
 const TYPE_MARK = { grammar: "❌", natural: "💬", advanced: "✨" };
 
 function renderFeedback(items, good) {
@@ -307,7 +473,7 @@ function renderFeedback(items, good) {
   card.className = "turn";
   const said = document.createElement("div");
   said.className = "said";
-  said.textContent = `「${target.querySelector("span").textContent}」`;
+  said.textContent = `「${target.querySelector(".text").textContent}」`;
   card.append(said);
   for (const it of items ?? []) {
     const row = document.createElement("div");
@@ -350,6 +516,12 @@ ui.summaryClose.addEventListener("click", () => { ui.summary.hidden = true; });
 // ---------- WebMCP ツール ----------
 const text = (obj) => ({ content: [{ type: "text", text: typeof obj === "string" ? obj : JSON.stringify(obj) }] });
 
+const EVENT_DOC =
+  "戻り値の status: reply=ユーザーの発言（text。input=voice/voice_edited/typed。voice のときは alternatives=認識の別候補, low_confidence_segments。" +
+  "intent_ja があれば、ユーザーが先に日本語で書いた「言いたかったこと」）, " +
+  "lookup=ユーザーがあなたの発言の一部を選んで意味を知りたがっている（id, phrase, sentence。answer_lookup で答えてから listen）, " +
+  "waiting=25秒以内に何も起きなかった（listen を呼んで待ち続ける）, stopped=ユーザーが停止した（lookups=調べた表現。end_session を呼ぶ）。";
+
 const FEEDBACK_SCHEMA = {
   type: "array",
   description: "直前のユーザー発言への指摘（最大3件、重要な順）。指摘がなければ空配列",
@@ -381,43 +553,43 @@ mcp.registerTool(
     stopped = false;
     ui.stopBtn.dataset.stopped = "false";
     ui.stopBtn.textContent = "停止";
-    utterances.length = 0;
+    events.length = 0;
     ui.scenario.textContent = [scenario, level].filter(Boolean).join(" · ");
     if (ui.ttsEngine.value === "kokoro") loadKokoro();
     setState("idle");
-    return text({ ok: true, tts: ui.ttsEngine.value, silence_seconds: Number(ui.silence.value) });
+    return text({ ok: true, tts: ui.ttsEngine.value, silence_seconds: Number(ui.silence.value), auto_send: autoSendPref });
   },
 );
 
 mcp.registerTool(
   "say_and_listen",
-  "① feedback を直前のユーザー発言への指摘として画面に出す（読み上げない）→ ② reply を画面に出して読み上げる → ③ ユーザーが話し終えるまで待ち、書き起こしを返す。" +
-    "戻り値の status: reply=ユーザーの発言（text, alternatives=認識の別候補, low_confidence_segments）, " +
-    "waiting=25秒以内に発言が終わらなかった（listen を呼んで待ち続ける）, stopped=ユーザーが停止した（end_session を呼ぶ）。",
+  "① feedback を直前のユーザー発言への指摘として画面に出す（読み上げない）→ ② reply を画面に出して読み上げる（reply_ja は「訳」ボタンで出る日本語訳）→ ③ ユーザーの次のイベントを待って返す。" +
+    EVENT_DOC,
   {
     type: "object",
     properties: {
       reply: { type: "string", description: "あなたの英語の発話。短く自然に" },
+      reply_ja: { type: "string", description: "reply の自然な日本語訳" },
       feedback: FEEDBACK_SCHEMA,
       good: { type: "string", description: "よかった点があれば日本語で一言（任意）" },
     },
-    required: ["reply"],
+    required: ["reply", "reply_ja"],
   },
-  async ({ reply, feedback, good } = {}) => {
+  async ({ reply, reply_ja, feedback, good } = {}) => {
     const deadline = Date.now() + TOOL_BUDGET_MS;
-    if (stopped) return text({ status: "stopped" });
+    if (stopped) return text(stoppedEvent());
     if (feedback?.length || good) renderFeedback(feedback, good);
     micOff();
-    addMessage("ai", reply);
+    addMessage("ai", reply, reply_ja);
     setState("speaking");
     // 読み上げが長引いても 25 秒枠は守る。読み上げ終了後にマイクを開く
     const spoken = speak(reply).then(() => micOn());
     const result = await Promise.race([
-      spoken.then(() => waitUtterance(deadline)),
+      spoken.then(() => waitEvent(deadline)),
       new Promise((r) => setTimeout(() => {
-        // 待ち手を外しておけば、この後の発話はキューに入り、次の listen が受け取る
+        // 待ち手を外しておけば、この後のイベントはキューに入り、次の listen が受け取る
         waiter = null;
-        r({ status: "waiting", user_is_speaking: false });
+        r(waitingEvent());
       }, Math.max(0, deadline - Date.now()))),
     ]);
     return text(result);
@@ -426,11 +598,33 @@ mcp.registerTool(
 
 mcp.registerTool(
   "listen",
-  "ユーザーの次の発言を最大25秒待つ。say_and_listen や listen が status=waiting を返したときに呼ぶ。戻り値は say_and_listen と同じ。",
+  "ユーザーの次のイベントを最大25秒待つ。status=waiting のあとや、answer_lookup のあとに呼ぶ。" + EVENT_DOC,
   { type: "object", properties: {} },
   async () => {
-    if (!stopped && !micWanted && ui.state.dataset.state !== "speaking" && !utterances.length) micOn();
-    return text(await waitUtterance(Date.now() + TOOL_BUDGET_MS));
+    if (!stopped && !micWanted && ui.state.dataset.state !== "speaking" && !events.length) micOn();
+    return text(await waitEvent(Date.now() + TOOL_BUDGET_MS));
+  },
+);
+
+mcp.registerTool(
+  "answer_lookup",
+  "status=lookup への答え。選ばれた表現の、その文脈での意味を日本語で表示する。答えたら listen で待ちに戻る。",
+  {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "lookup イベントの id" },
+      meaning: { type: "string", description: "日本語の意味（その文脈で）。必要なら短い使い方や言い換えも。2〜3 行まで" },
+    },
+    required: ["id", "meaning"],
+  },
+  async ({ id, meaning } = {}) => {
+    const l = lookups.get(id);
+    if (!l) return text({ ok: false, error: `unknown id: ${id}` });
+    l.meaning = meaning;
+    l.mark.classList.remove("pending");
+    l.mark.title = meaning;
+    if (popupFor === id) showPopup(id);
+    return text({ ok: true });
   },
 );
 
@@ -440,7 +634,7 @@ mcp.registerTool(
   {
     type: "object",
     properties: {
-      summary: { type: "string", description: "日本語のまとめ（繰り返した誤り、覚えたい表現、よかった点）。改行可" },
+      summary: { type: "string", description: "日本語のまとめ（繰り返した誤り、覚えたい表現、調べた表現、よかった点）。改行可" },
     },
     required: ["summary"],
   },
