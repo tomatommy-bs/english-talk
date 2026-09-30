@@ -9,17 +9,111 @@ Claude Code だけを頭脳にして、ブラウザで英会話と添削を行�
 
 ## 使い方
 
-1. Chrome で https://tomatommy-bs.github.io/english-talk/ を開く（音声認識は Chrome 前提）
-   - 手元で配信するなら `./serve.sh` → http://localhost:5173
-   - 公開ページから手元のブリッジ（localhost）への接続を Chrome が確認してきたら許可する
-2. このフォルダで Claude Code を起動し、`.mcp.json` の webmcp サーバーを承認する
+使い方は 2 通りあります。どちらも **Claude Code は手元で動かし**、ページは Chrome で開きます。違うのはページの置き場所だけです。
+
+| | A. clone してローカルで起動 | B. GitHub Pages につなぐ |
+|---|---|---|
+| ページ | 手元で配信（http://localhost:5173） | https://tomatommy-bs.github.io/english-talk/ |
+| 手元に必要なもの | このリポジトリ一式 | 設定ファイル 3 つだけ |
+| 向いている人 | ページを改造したい | 使うだけでいい |
+
+### 共通の前提
+
+- [Claude Code](https://claude.com/claude-code)（サブスクで使える。API キーは不要）
+- Node.js（`npx` で webmcp ブリッジを起動する）
+- Chrome（音声認識に Web Speech API を使う）
+
+### A. clone してローカルで起動
+
+**セットアップ（初回のみ）**
+
+```sh
+git clone https://github.com/tomatommy-bs/english-talk.git
+cd english-talk
+```
+
+webmcp の登録（`.mcp.json`）、`/english` コマンド、ツール呼び出しの自動許可（`.claude/settings.json`）はリポジトリに入っているので、追加の設定は要りません。
+ローカル配信には Python 3 を使います（macOS なら標準で入っています）。
+
+**毎回の手順**
+
+1. ページを配信する（別ターミナルで。止めるときは Ctrl+C）
+   ```sh
+   ./serve.sh
+   ```
+2. Chrome で http://localhost:5173 を開く
+3. リポジトリのフォルダで Claude Code を起動し、会話を始める
    ```sh
    claude
+   > /english cafe B1
    ```
-3. `/english cafe B1` のように始める。初回は Claude がトークンを出すので、ページ右下の青いボタンに貼る
-4. あとは話すだけ。止めるときはページの「停止」
+   初回はフォルダの信頼と webmcp サーバーの承認を聞かれるので許可する。
+4. Claude がトークンを出すので、ページ右下の青いボタンを押して貼り、Connect
+5. ヘッダーに「WebMCP 接続中」と出たら、あとは話すだけ。やめるときはページの「停止」
 
-ページを再読み込みすると WebMCP の接続が切れるので、トークンを取り直す（Claude に「webmcp のトークンを出して」）。
+### B. GitHub Pages につなぐ
+
+ページは公開済みのものを使い、手元には Claude Code 用の設定だけを置きます。
+設定はフォルダ単位なので、ほかのプロジェクトには影響しません。
+
+**セットアップ（初回のみ）**
+
+好きな場所に作業フォルダを作り、次の 3 ファイルを置きます。
+
+```sh
+mkdir -p ~/english-talk && cd ~/english-talk
+mkdir -p .claude/commands
+
+# 1. webmcp ブリッジを MCP サーバーとして登録
+cat > .mcp.json <<'EOF'
+{
+  "mcpServers": {
+    "webmcp": {
+      "command": "npx",
+      "args": ["-y", "@jason.today/webmcp@0.1.13", "--mcp"]
+    }
+  }
+}
+EOF
+
+# 2. webmcp を有効化し、ツール呼び出しを毎回確認しないようにする
+cat > .claude/settings.json <<'EOF'
+{
+  "enabledMcpjsonServers": ["webmcp"],
+  "permissions": {
+    "allow": ["mcp__webmcp"]
+  }
+}
+EOF
+
+# 3. /english コマンド（会話と添削のルール）
+curl -fsSL -o .claude/commands/english.md \
+  https://raw.githubusercontent.com/tomatommy-bs/english-talk/main/.claude/commands/english.md
+```
+
+`/english` のルールが更新されたら、3 の `curl` をもう一度実行すると最新になります。
+
+**毎回の手順**
+
+1. Chrome で https://tomatommy-bs.github.io/english-talk/ を開く
+2. 作業フォルダで Claude Code を起動し、会話を始める
+   ```sh
+   cd ~/english-talk
+   claude
+   > /english cafe B1
+   ```
+   初回はフォルダの信頼と webmcp サーバーの承認を聞かれるので許可する。
+3. Claude がトークンを出すので、ページ右下の青いボタンを押して貼り、Connect
+4. **Chrome がローカルネットワークへのアクセス許可を求めてきたら許可する**。公開ページから手元のブリッジ（`localhost:4797`）につなぐために必要です。
+   確認が出ないまま「Registering...」で止まる場合は、アドレスバー左のアイコン → サイトの設定で「ローカルネットワークへのアクセス」を許可し、もう一度 Connect を押す。
+5. ヘッダーに「WebMCP 接続中」と出たら、あとは話すだけ。やめるときはページの「停止」
+
+### 困ったとき
+
+- **ページを再読み込みすると接続が切れる**：Claude に「webmcp のトークンを出して」と頼み、もう一度貼る
+- **Claude がサーバーを探し始めた**：`/english` のルールが古い可能性がある。B なら `curl` で取り直す
+- **応答が遅い**：Claude Code の `/model` で Sonnet や Haiku に切り替えると速くなる
+- **会話のまとめ**：終了時に、Claude Code を起動したフォルダの `logs/<日付>.md` に追記される
 
 ## 構成
 
