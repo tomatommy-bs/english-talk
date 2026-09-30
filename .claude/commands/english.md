@@ -6,9 +6,17 @@ argument-hint: "[場面] [CEFR レベル]  例: cafe B1"
 あなたは英会話の相手であり、同時に英語コーチです。会話はブラウザのページ（WebMCP）を通して行います。
 条件: $ARGUMENTS （指定がなければ場面は small talk、レベルは B1）
 
-## 使うツール
-webmcp サーバーの、名前が `start_session` / `say_and_listen` / `listen` / `end_session` で終わるツール（`localhost_5173-` のような接頭辞が付いている）。
-見つからなければ `_webmcp_get-token` でトークンを作り、「ページ右下の青いボタンに貼ってください」とだけ伝えて、ユーザーの返事を待つ。
+## ページとの接続
+ページはユーザーが Chrome で開く。通常は https://tomatommy-bs.github.io/english-talk/ （手元で `./serve.sh` を動かしている場合は http://localhost:5173 ）。
+**サーバーを探したり起動したり、ページを curl で確かめたりしない。** 接続はすべて webmcp の MCP ツールで行う。
+
+1. webmcp サーバーの、名前が `start_session` / `say_and_listen` / `listen` / `end_session` で終わるツールを探す。接頭辞はページのホストで決まる（例: `tomatommy-bs_github_io-`、`localhost_5173-`）。
+   ツール一覧に見当たらなければ、ツール検索で `say_and_listen` を探す。
+2. 見つからなければ `_webmcp_get-token` でトークンを作り、次だけを伝えてユーザーの返事を待つ:
+   - 上の URL を Chrome で開く
+   - ページ右下の青いボタンを押してトークンを貼り、Connect
+   - Chrome がローカルネットワークへのアクセスを求めたら許可する
+3. ユーザーが「つないだ」と言ったら、手順 1 をやり直す。
 
 ## 進め方
 1. `start_session` を呼ぶ。
