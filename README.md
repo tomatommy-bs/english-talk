@@ -33,13 +33,13 @@ cd english-talk
 ```
 
 webmcp の登録（`.mcp.json`）、`/english` コマンド、ツール呼び出しの自動許可（`.claude/settings.json`）はリポジトリに入っているので、追加の設定は要りません。
-ローカル配信には Python 3 を使います（macOS なら標準で入っています）。
+ページは Vite + React で書かれていて、初回の `./serve.sh` で依存パッケージを入れます（Node.js 20.19 以上）。
 
 **毎回の手順**
 
 1. ページを配信する（別ターミナルで。止めるときは Ctrl+C）
    ```sh
-   ./serve.sh
+   ./serve.sh        # web/ で npm run dev と同じ。編集はすぐ画面に反映される
    ```
 2. Chrome で http://localhost:5173 を開く
 3. リポジトリのフォルダで Claude Code を起動し、会話を始める
@@ -117,10 +117,17 @@ curl -fsSL -o .claude/commands/english.md \
 
 ## 構成
 
+ページは `web/`（Vite + React + TypeScript + Tailwind CSS）。GitHub Pages へは Actions がビルドして公開する。
+
 | ファイル | 役割 |
 |---|---|
-| `web/app.js` | 読み上げ（Kokoro / OS 音声）、音声認識（Web Speech API）、話し終わり判定、WebMCP ツール |
-| `web/webmcp.js` | WebMCP ウィジェット（`@jason.today/webmcp@0.1.13` の `src/webmcp.js`） |
+| `web/src/lib/tools.ts` | WebMCP で公開するツール |
+| `web/src/lib/session.ts` | 会話の進行（音声入力、送信、フィードバック、意味調べ、停止） |
+| `web/src/lib/events.ts` | ページ → Claude のイベントキュー（ツールの待ち時間をまたいでも失わない） |
+| `web/src/lib/recognition.ts` / `tts.ts` | 音声認識（Web Speech API）/ 読み上げ（Kokoro、OS 音声） |
+| `web/src/lib/store.ts` | 画面の状態（zustand） |
+| `web/src/components/` | 画面（ヘッダー、会話ログ、入力欄、フィードバック、意味のポップアップ、まとめ） |
+| `web/public/webmcp.js` | WebMCP ウィジェット（`@jason.today/webmcp@0.1.13` の `src/webmcp.js`） |
 | `.claude/commands/english.md` | 会話と添削のルール（Claude への指示） |
 | `.mcp.json` / `.claude/settings.json` | webmcp の登録と、ツール呼び出しの自動許可 |
 | `logs/` | セッションごとのまとめ |
@@ -148,4 +155,4 @@ webmcp のブリッジはツール呼び出しを 30 秒で打ち切るため、
 
 ## サードパーティ
 
-`web/webmcp.js` は [jasonjmcghee/WebMCP](https://github.com/jasonjmcghee/WebMCP)（MIT License, © 2025 Jason McGhee）のものです。ライセンス全文は `web/webmcp.LICENSE`。
+`web/public/webmcp.js` は [jasonjmcghee/WebMCP](https://github.com/jasonjmcghee/WebMCP)（MIT License, © 2025 Jason McGhee）のものです。ライセンス全文は `web/public/webmcp.LICENSE`。

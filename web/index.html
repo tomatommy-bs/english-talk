@@ -1,83 +1,14 @@
 <!doctype html>
 <html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>English Talk</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-<div class="app">
-<header class="bar">
-  <div class="title">
-    <strong>English Talk</strong>
-    <span id="scenario" class="muted"></span>
-  </div>
-  <div class="status">
-    <span id="state" class="pill" data-state="idle">待機中</span>
-    <span id="mcp" class="pill" data-ok="false">WebMCP 未接続</span>
-  </div>
-  <div class="controls">
-    <label title="読み上げエンジン">
-      🔊
-      <select id="ttsEngine">
-        <option value="kokoro">Kokoro（自然）</option>
-        <option value="os">OS 音声</option>
-      </select>
-    </label>
-    <label title="話し終わりとみなす無音の秒数">
-      ⏱
-      <input id="silence" type="range" min="0.8" max="4" step="0.2" value="1.8">
-      <span id="silenceVal">1.8s</span>
-    </label>
-    <button id="stopBtn" class="danger">停止</button>
-  </div>
-</header>
-
-<main>
-  <section class="chat">
-    <div id="log" class="log"></div>
-    <div class="live">
-      <div id="memo" class="memo" hidden>
-        <span class="memoLabel">🇯🇵</span>
-        <input id="memoInput" placeholder="日本語で伝えたいこと（話すか入力）" autocomplete="off">
-        <button type="button" id="memoClear" class="icon" title="日本語メモを消す">✕</button>
-      </div>
-      <form id="typeForm" class="composer">
-        <button type="button" id="jaBtn" class="icon" title="先に日本語で伝えたいことを記録する">🇯🇵</button>
-        <input id="typeInput" placeholder="話すとここに入ります（入力も可）" autocomplete="off">
-        <button type="button" id="clearBtn" class="icon" title="入力を消す（Esc）">✕</button>
-        <button type="submit" id="sendBtn" class="primary" title="送信（Enter）">送信</button>
-      </form>
-      <div class="liveFoot">
-        <span id="hint" class="muted"></span>
-        <label class="auto" title="話し終わったら自動で送信。入力欄を手で触るとそのターンだけオフ">
-          <input type="checkbox" id="autoSend" checked> 自動送信
-        </label>
-      </div>
-    </div>
-  </section>
-  <aside class="fb">
-    <h2>フィードバック</h2>
-    <div id="fbList" class="fbList"><p class="muted">あなたの発言への指摘がここに出ます</p></div>
-  </aside>
-</main>
-</div>
-
-<div id="popup" class="popup" hidden>
-  <div id="popupPhrase" class="popupPhrase"></div>
-  <div id="popupBody"></div>
-</div>
-
-<div id="summary" class="summary" hidden>
-  <div class="summaryBody">
-    <h2>今日のまとめ</h2>
-    <div id="summaryText"></div>
-    <button id="summaryClose">閉じる</button>
-  </div>
-</div>
-
-<script src="webmcp.js"></script>
-<script type="module" src="app.js"></script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>English Talk</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- WebMCP ウィジェット（グローバルに WebMCP クラスを置く通常のスクリプト） -->
+    <script src="./webmcp.js"></script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
