@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { hidePopup, requestLookup, showPopup, speak } from "../lib/session";
-import { useStore, type Message } from "../lib/store";
+import { hidePopup, requestLookup, showFeedbackPopup, showLookupPopup, speak } from "../lib/session";
+import { useStore, type FeedbackRef, type FeedbackType, type Message } from "../lib/store";
 
 export function ChatLog() {
   const messages = useStore((s) => s.messages);
@@ -19,6 +19,32 @@ export function ChatLog() {
 
 const bubble = "max-w-[85%] rounded-xl px-3 py-2";
 
+export const FEEDBACK_MARK: Record<FeedbackType, string> = { grammar: "❌", natural: "💬", advanced: "✨" };
+
+/** 下線の色と形。文法の誤りは波線で目立たせる */
+const UNDERLINE: Record<FeedbackType, string> = {
+  grammar: "decoration-grammar decoration-wavy",
+  natural: "decoration-natural",
+  advanced: "decoration-advanced decoration-dotted",
+};
+
+/** 本文を範囲（start〜end）で区切り、範囲の部分は render で描く */
+function splitByRanges<T extends { start: number; end: number }>(
+  text: string,
+  ranges: T[],
+  render: (range: T, slice: string) => ReactNode,
+): ReactNode[] {
+  const parts: ReactNode[] = [];
+  let pos = 0;
+  for (const r of ranges) {
+    if (r.start > pos) parts.push(text.slice(pos, r.start));
+    parts.push(render(r, text.slice(r.start, r.end)));
+    pos = r.end;
+  }
+  if (pos < text.length) parts.push(text.slice(pos));
+  return parts;
+}
+
 function useFlash(id: string) {
   const flash = useStore((s) => s.flashId === id);
   const ref = useRef<HTMLDivElement>(null);
@@ -28,13 +54,41 @@ function useFlash(id: string) {
   return { ref, flash };
 }
 
+function openFeedback(e: MouseEvent<HTMLElement>, refs: FeedbackRef[]) {
+  e.stopPropagation();
+  showFeedbackPopup(refs, e.currentTarget.getBoundingClientRect());
+}
+
 function MyMessage({ m }: { m: Message }) {
   const { ref, flash } = useFlash(m.id);
+  const parts = splitByRanges(m.text, m.fbSpans ?? [], (sp, slice) => (
+    <span
+      key={`${sp.cardId}-${sp.index}`}
+      data-popup-anchor
+      title="クリックで指摘を見る"
+      onClick={(e) => openFeedback(e, [sp])}
+      className={`cursor-pointer underline decoration-2 underline-offset-4 hover:bg-black/5 ${UNDERLINE[sp.type]}`}
+    >
+      {slice}
+    </span>
+  ));
+  const whole = m.fbWhole ?? [];
+
   return (
     <div ref={ref} className={`${bubble} self-end bg-me ${flash ? "outline-2 outline-accent" : ""}`}>
-      <span>{m.text}</span>
+      <span>{parts}</span>
       {m.ja && <div className="mt-1 text-[13px] text-muted">🇯🇵 {m.ja}</div>}
-      {m.marks && <div className="mt-0.5 text-xs">{m.marks}</div>}
+      {whole.length > 0 && (
+        <button
+          data-popup-anchor
+          className="mt-0.5 block text-xs"
+          title="文全体への指摘を見る"
+          onClick={(e) => openFeedback(e, whole)}
+        >
+          {whole.map((r) => FEEDBACK_MARK[r.type]).join("")}
+        </button>
+      )}
+      {m.good && <div className="mt-0.5 text-xs">👍</div>}
     </div>
   );
 }
@@ -67,20 +121,9 @@ function AiMessage({ m }: { m: Message }) {
     if (end > start) requestLookup(m.id, start, end, rect);
   };
 
-  const onMarkClick = (e: MouseEvent<HTMLElement>, lookupId: string) => {
-    e.stopPropagation();
-    showPopup(lookupId, e.currentTarget.getBoundingClientRect());
-  };
-
-  // ハイライトの範囲で本文を区切って描く
-  const parts: ReactNode[] = [];
-  let pos = 0;
-  for (const h of m.highlights) {
-    if (h.start > pos) parts.push(m.text.slice(pos, h.start));
-    parts.push(<Mark key={h.lookupId} lookupId={h.lookupId} text={m.text.slice(h.start, h.end)} onClick={onMarkClick} />);
-    pos = h.end;
-  }
-  if (pos < m.text.length) parts.push(m.text.slice(pos));
+  const parts = splitByRanges(m.text, m.highlights, (h, slice) => (
+    <LookupMark key={h.lookupId} lookupId={h.lookupId} text={slice} />
+  ));
 
   const tool = "px-0.5 text-[13px] opacity-55 hover:opacity-100";
   return (
@@ -103,20 +146,16 @@ function AiMessage({ m }: { m: Message }) {
   );
 }
 
-function Mark({
-  lookupId,
-  text,
-  onClick,
-}: {
-  lookupId: string;
-  text: string;
-  onClick: (e: MouseEvent<HTMLElement>, id: string) => void;
-}) {
+function LookupMark({ lookupId, text }: { lookupId: string; text: string }) {
   const meaning = useStore((s) => s.lookups[lookupId]?.meaning);
   return (
     <mark
+      data-popup-anchor
       title={meaning ?? undefined}
-      onClick={(e) => onClick(e, lookupId)}
+      onClick={(e) => {
+        e.stopPropagation();
+        showLookupPopup(lookupId, e.currentTarget.getBoundingClientRect());
+      }}
       className={`cursor-pointer rounded-sm bg-hl px-px text-inherit ${meaning ? "" : "outline outline-dashed outline-accent"}`}
     >
       {text}

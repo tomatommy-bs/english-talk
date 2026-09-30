@@ -2,7 +2,19 @@
 
 import { deliver, type PageEvent } from "./events";
 import { Recognizer, type FinalResult } from "./recognition";
-import { fieldText, get, newId, savePref, set, setField, type FeedbackItem, type FieldName, type Phase } from "./store";
+import {
+  fieldText,
+  get,
+  newId,
+  savePref,
+  set,
+  setField,
+  type FeedbackItem,
+  type FeedbackRef,
+  type FeedbackSpan,
+  type FieldName,
+  type Phase,
+} from "./store";
 import { loadKokoro, speak as ttsSpeak, stopSpeaking } from "./tts";
 
 // ---------- 状態表示 ----------
@@ -231,16 +243,36 @@ export function addMessage(role: "ai" | "me", text: string, ja?: string): string
   return id;
 }
 
-const TYPE_MARK = { grammar: "❌", natural: "💬", advanced: "✨" } as const;
+/** 指摘された部分（original）を発言の中から探す。見つからなければ null */
+function locate(text: string, original: string): [number, number] | null {
+  const needle = original.trim().replace(/[.!?。、,]+$/, "");
+  if (!needle) return null;
+  const start = text.toLowerCase().indexOf(needle.toLowerCase());
+  return start < 0 ? null : [start, start + needle.length];
+}
 
 export function addFeedback(items: FeedbackItem[] = [], good?: string): void {
   const messageId = lastMineId;
-  if (!messageId) return;
-  const said = get().messages.find((m) => m.id === messageId)?.text ?? "";
-  const marks = items.map((it) => TYPE_MARK[it.type] ?? "•").join("") || "👍";
+  const msg = get().messages.find((m) => m.id === messageId);
+  if (!messageId || !msg) return;
+  const cardId = newId("f");
+  const spans: FeedbackSpan[] = [];
+  const whole: FeedbackRef[] = [];
+  const bodyLength = msg.text.replace(/[\s.!?]+$/, "").length;
+  items.forEach((it, index) => {
+    const ref: FeedbackRef = { cardId, index, type: it.type };
+    const at = locate(msg.text, it.original);
+    // 見つからない・ほぼ全文・ほかの指摘と重なる → 文全体への指摘として扱う
+    const overlaps = at && spans.some((sp) => at[0] < sp.end && sp.start < at[1]);
+    if (!at || at[1] - at[0] >= bodyLength * 0.9 || overlaps) whole.push(ref);
+    else spans.push({ ...ref, start: at[0], end: at[1] });
+  });
+  spans.sort((a, b) => a.start - b.start);
   set((s) => ({
-    feedback: [{ id: newId("f"), messageId, said, items, good }, ...s.feedback],
-    messages: s.messages.map((m) => (m.id === messageId ? { ...m, marks } : m)),
+    feedback: [{ id: cardId, messageId, said: msg.text, items, good }, ...s.feedback],
+    messages: s.messages.map((m) =>
+      m.id === messageId ? { ...m, fbSpans: spans, fbWhole: whole, good: items.length === 0 && !!good } : m,
+    ),
   }));
 }
 
@@ -268,7 +300,7 @@ export function requestLookup(messageId: string, start: number, end: number, rec
         : m,
     ),
   }));
-  showPopup(id, rect);
+  showLookupPopup(id, rect);
   if (!get().stopped) deliver({ status: "lookup", id, phrase, sentence: msg.text });
 }
 
@@ -279,8 +311,12 @@ export function answerLookup(id: string, meaning: string): boolean {
   return true;
 }
 
-export function showPopup(lookupId: string, rect: DOMRect): void {
-  set({ popup: { lookupId, x: rect.left, y: rect.bottom + 6 } });
+export function showLookupPopup(lookupId: string, rect: DOMRect): void {
+  set({ popup: { kind: "lookup", lookupId, x: rect.left, y: rect.bottom + 6 } });
+}
+
+export function showFeedbackPopup(refs: FeedbackRef[], rect: DOMRect): void {
+  set({ popup: { kind: "feedback", refs, x: rect.left, y: rect.bottom + 6 } });
 }
 
 export function hidePopup(): void {

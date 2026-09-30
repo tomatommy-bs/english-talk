@@ -1,10 +1,11 @@
 import { flashMessage } from "../lib/session";
 import { useStore, type FeedbackType } from "../lib/store";
+import { FEEDBACK_MARK } from "./ChatLog";
 
-const TYPE: Record<FeedbackType, { mark: string; border: string }> = {
-  grammar: { mark: "❌", border: "border-grammar" },
-  natural: { mark: "💬", border: "border-natural" },
-  advanced: { mark: "✨", border: "border-advanced" },
+const BORDER: Record<FeedbackType, string> = {
+  grammar: "border-grammar",
+  natural: "border-natural",
+  advanced: "border-advanced",
 };
 
 export function FeedbackPanel() {
@@ -25,8 +26,8 @@ export function FeedbackPanel() {
             >
               <div className="mb-1.5 text-[13px] text-muted">「{card.said}」</div>
               {card.items.map((it, i) => (
-                <div key={i} className={`mt-1.5 border-l-[3px] py-1.5 pl-2.5 ${TYPE[it.type]?.border ?? "border-line"}`}>
-                  <span>{TYPE[it.type]?.mark ?? "•"} </span>
+                <div key={i} className={`mt-1.5 border-l-[3px] py-1.5 pl-2.5 ${BORDER[it.type] ?? "border-line"}`}>
+                  <span>{FEEDBACK_MARK[it.type] ?? "•"} </span>
                   <span className="text-muted line-through">{it.original}</span>
                   {" → "}
                   <span className="font-semibold">{it.better}</span>

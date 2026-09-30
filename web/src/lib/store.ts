@@ -12,9 +12,19 @@ export type Message = {
   /** AI: 日本語訳 / 自分: 先に日本語で書いた言いたいこと */
   ja?: string;
   highlights: Highlight[];
-  /** 自分の発言に付く添削の印（❌💬✨👍） */
-  marks?: string;
+  /** 自分の発言のうち、指摘された部分（下線を引いてクリックで指摘を出す） */
+  fbSpans?: FeedbackSpan[];
+  /** 自分の発言全体への指摘（吹き出しのアイコンから出す） */
+  fbWhole?: FeedbackRef[];
+  /** 指摘がなくよかったとき */
+  good?: boolean;
 };
+/** フィードバックの 1 項目への参照 */
+export type FeedbackRef = { cardId: string; index: number; type: FeedbackType };
+export type FeedbackSpan = FeedbackRef & { start: number; end: number };
+export type Popup =
+  | { kind: "lookup"; lookupId: string; x: number; y: number }
+  | { kind: "feedback"; refs: FeedbackRef[]; x: number; y: number };
 export type FeedbackCard = { id: string; messageId: string; said: string; items: FeedbackItem[]; good?: string };
 export type Lookup = { id: string; messageId: string; phrase: string; meaning: string | null };
 export type FieldName = "input" | "memo";
@@ -28,7 +38,7 @@ type State = {
   messages: Message[];
   feedback: FeedbackCard[];
   lookups: Record<string, Lookup>;
-  popup: { lookupId: string; x: number; y: number } | null;
+  popup: Popup | null;
   fields: Record<FieldName, FieldState>;
   jaMode: boolean;
   memoOpen: boolean;

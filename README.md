@@ -126,7 +126,7 @@ curl -fsSL -o .claude/commands/english.md \
 | `web/src/lib/events.ts` | ページ → Claude のイベントキュー（ツールの待ち時間をまたいでも失わない） |
 | `web/src/lib/recognition.ts` / `tts.ts` | 音声認識（Web Speech API）/ 読み上げ（Kokoro、OS 音声） |
 | `web/src/lib/store.ts` | 画面の状態（zustand） |
-| `web/src/components/` | 画面（ヘッダー、会話ログ、入力欄、フィードバック、意味のポップアップ、まとめ） |
+| `web/src/components/` | 画面（ヘッダー、会話ログ、入力欄、フィードバック、意味と指摘のポップアップ、まとめ） |
 | `web/public/webmcp.js` | WebMCP ウィジェット（`@jason.today/webmcp@0.1.13` の `src/webmcp.js`） |
 | `.claude/commands/english.md` | 会話と添削のルール（Claude への指示） |
 | `.mcp.json` / `.claude/settings.json` | webmcp の登録と、ツール呼び出しの自動許可 |
@@ -147,6 +147,7 @@ curl -fsSL -o .claude/commands/english.md \
 ## ページの操作
 
 - AI の発言の「訳」で日本語訳、一部を選択すると意味をポップアップ（ハイライトは残る）
+- 自分の発言で指摘された部分には下線（❌ 文法は赤い波線、💬 自然な表現はオレンジ、✨ 上級は緑の点線）。クリックでその指摘を表示。文全体への指摘は吹き出しのアイコンから
 - 音声は入力欄に入る。「自動送信」がオンなら話し終わりで送信。入力欄を手で触るとそのターンだけ自動送信オフ
 - ✕（または Esc）で入力中の内容を消す
 - 🇯🇵 で先に日本語で言いたいことを記録 → EN で英語に切り替えて話す
