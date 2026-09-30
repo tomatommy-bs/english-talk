@@ -9,17 +9,15 @@ Claude Code だけを頭脳にして、ブラウザで英会話と添削を行�
 
 ## 使い方
 
-1. ページを配信する
-   ```sh
-   ./serve.sh        # http://localhost:5173
-   ```
-2. Chrome で http://localhost:5173 を開く（音声認識は Chrome 前提）
-3. このフォルダで Claude Code を起動し、`.mcp.json` の webmcp サーバーを承認する
+1. Chrome で https://tomatommy-bs.github.io/english-talk/ を開く（音声認識は Chrome 前提）
+   - 手元で配信するなら `./serve.sh` → http://localhost:5173
+   - 公開ページから手元のブリッジ（localhost）への接続を Chrome が確認してきたら許可する
+2. このフォルダで Claude Code を起動し、`.mcp.json` の webmcp サーバーを承認する
    ```sh
    claude
    ```
-4. `/english cafe B1` のように始める。初回は Claude がトークンを出すので、ページ右下の青いボタンに貼る
-5. あとは話すだけ。止めるときはページの「停止」
+3. `/english cafe B1` のように始める。初回は Claude がトークンを出すので、ページ右下の青いボタンに貼る
+4. あとは話すだけ。止めるときはページの「停止」
 
 ページを再読み込みすると WebMCP の接続が切れるので、トークンを取り直す（Claude に「webmcp のトークンを出して」）。
 
