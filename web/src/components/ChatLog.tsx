@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { hidePopup, requestLookup, showFeedbackPopup, showLookupPopup, speak } from "../lib/session";
+import { hidePopup, requestLookup, requestTranslation, showFeedbackPopup, showLookupPopup, speak } from "../lib/session";
 import { useStore, type FeedbackRef, type FeedbackType, type Message } from "../lib/store";
 
 export function ChatLog() {
@@ -135,13 +135,21 @@ function AiMessage({ m }: { m: Message }) {
         <button className={tool} title="もう一度聞く" onClick={() => void speak(m.text)}>
           🔊
         </button>
-        {m.ja && (
-          <button className={`${tool} ${showJa ? "opacity-100" : ""}`} title="日本語訳" onClick={() => setShowJa(!showJa)}>
-            訳
-          </button>
-        )}
+        <button
+          className={`${tool} ${showJa ? "opacity-100" : ""}`}
+          title="日本語訳"
+          onClick={() => {
+            // 訳が付いていなければ、その場で Claude に頼む
+            if (!showJa && !m.ja) requestTranslation(m.id);
+            setShowJa(!showJa);
+          }}
+        >
+          訳
+        </button>
       </span>
-      {m.ja && showJa && <div className="mt-1 text-[13px] text-muted">{m.ja}</div>}
+      {showJa && (
+        <div className="mt-1 text-[13px] text-muted">{m.ja ?? (m.jaPending ? "翻訳しています…" : "訳がありません")}</div>
+      )}
     </div>
   );
 }

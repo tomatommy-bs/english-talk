@@ -209,7 +209,7 @@ export function sendReply(): void {
 
 export function stoppedEvent(): PageEvent {
   const lookups = Object.values(get().lookups)
-    .filter((l) => l.meaning)
+    .filter((l) => l.meaning && !l.translate)
     .map((l) => ({ phrase: l.phrase, meaning: l.meaning }));
   return { status: "stopped", lookups };
 }
@@ -304,10 +304,27 @@ export function requestLookup(messageId: string, start: number, end: number, rec
   if (!get().stopped) deliver({ status: "lookup", id, phrase, sentence: msg.text });
 }
 
+/** 日本語訳が付いていない発言の訳を Claude に頼む（意味調べと同じ仕組みで、文全体を渡す） */
+export function requestTranslation(messageId: string): void {
+  const msg = get().messages.find((m) => m.id === messageId);
+  if (!msg || msg.ja || msg.jaPending || get().stopped) return;
+  const id = newId("t");
+  set((s) => ({
+    lookups: { ...s.lookups, [id]: { id, messageId, phrase: msg.text, meaning: null, translate: true } },
+    messages: s.messages.map((m) => (m.id === messageId ? { ...m, jaPending: true } : m)),
+  }));
+  deliver({ status: "lookup", id, phrase: msg.text, sentence: msg.text, translate: true });
+}
+
 export function answerLookup(id: string, meaning: string): boolean {
   const l = get().lookups[id];
   if (!l) return false;
-  set((s) => ({ lookups: { ...s.lookups, [id]: { ...l, meaning } } }));
+  set((s) => ({
+    lookups: { ...s.lookups, [id]: { ...l, meaning } },
+    messages: l.translate
+      ? s.messages.map((m) => (m.id === l.messageId ? { ...m, ja: meaning, jaPending: false } : m))
+      : s.messages,
+  }));
   return true;
 }
 

@@ -29,7 +29,7 @@ const whenStopped = () => (get().stopped ? stoppedEvent() : null);
 const EVENT_DOC =
   "戻り値の status: reply=ユーザーの発言（text。input=voice/voice_edited/typed。voice のときは alternatives=認識の別候補, low_confidence_segments。" +
   "intent_ja があれば、ユーザーが先に日本語で書いた「言いたかったこと」）, " +
-  "lookup=ユーザーがあなたの発言の一部を選んで意味を知りたがっている（id, phrase, sentence。answer_lookup で答えてから listen）, " +
+  "lookup=ユーザーがあなたの発言の一部を選んで意味を知りたがっている（id, phrase, sentence。answer_lookup で答えてから listen。translate: true のときは発言全体の日本語訳を頼まれているので、meaning に自然な日本語訳を入れる）, " +
   "waiting=25秒以内に何も起きなかった（listen を呼んで待ち続ける）, stopped=ユーザーが停止した（lookups=調べた表現。end_session を呼ぶ）。";
 
 const FEEDBACK_SCHEMA = {

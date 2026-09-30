@@ -53,6 +53,7 @@ argument-hint: "[場面] [CEFR レベル]  例: cafe B1"
 
 ### 調べた表現（lookup）
 - `answer_lookup` の meaning は 2〜3 行まで。その文脈での意味を先に、必要なら言い換えや使い方を一言。
+- `translate: true` の lookup は「訳」ボタンで発言全体の訳を頼まれたもの。meaning に自然な日本語訳だけを入れる。
 
 ## 音声認識について
 発言は音声認識の結果なので、認識ミスとユーザーの誤りを見分ける。

@@ -18,6 +18,8 @@ export type Message = {
   fbWhole?: FeedbackRef[];
   /** 指摘がなくよかったとき */
   good?: boolean;
+  /** 日本語訳を Claude に頼んでいる最中 */
+  jaPending?: boolean;
 };
 /** フィードバックの 1 項目への参照 */
 export type FeedbackRef = { cardId: string; index: number; type: FeedbackType };
@@ -26,7 +28,8 @@ export type Popup =
   | { kind: "lookup"; lookupId: string; x: number; y: number }
   | { kind: "feedback"; refs: FeedbackRef[]; x: number; y: number };
 export type FeedbackCard = { id: string; messageId: string; said: string; items: FeedbackItem[]; good?: string };
-export type Lookup = { id: string; messageId: string; phrase: string; meaning: string | null };
+/** translate: 発言全体の日本語訳を頼んだもの（reply_ja が無かったとき）。答えは meaning に入る */
+export type Lookup = { id: string; messageId: string; phrase: string; meaning: string | null; translate?: boolean };
 export type FieldName = "input" | "memo";
 export type FieldState = { committed: string; interim: string };
 export type TtsEngine = "kokoro" | "os";
