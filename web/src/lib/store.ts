@@ -42,6 +42,9 @@ type State = {
   summary: string | null;
   hint: string;
   flashId: string | null;
+  /** 返答のヒント（日本語）。しばらく黙っていると表示する */
+  suggestions: string[];
+  showSuggestions: boolean;
 };
 
 function loadPref(key: string, fallback: string): string {
@@ -81,6 +84,8 @@ export const useStore = create<State>(() => ({
   summary: null,
   hint: "",
   flashId: null,
+  suggestions: [],
+  showSuggestions: false,
 }));
 
 export const get = useStore.getState;

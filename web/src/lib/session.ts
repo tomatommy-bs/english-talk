@@ -58,6 +58,7 @@ function onRecognized(finals: FinalResult[], interim: string): void {
   }
   setField(name, { committed, interim });
   clearTimeout(silenceTimer);
+  armIdleTimer();
   // 認識途中の文字が残っている間は話し中とみなし、確定分があって無音が続いたら話し終わり
   const s = get();
   if (!s.jaMode && s.autoSend && s.fields.input.committed) {
@@ -70,16 +71,52 @@ const recognizer = new Recognizer({
   onError: (message) => set({ hint: message }),
 });
 
+// ---------- 返答のヒント（しばらく黙っていたら出す） ----------
+
+const IDLE_BEFORE_SUGGEST_MS = 8000;
+let idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+function inputIsEmpty(): boolean {
+  const f = get().fields;
+  return !fieldText(f.input).trim() && !fieldText(f.memo).trim();
+}
+
+/** 入力が何もないまま一定時間たったらヒントを出す。何か入力があるたびに数え直す */
+function armIdleTimer(): void {
+  clearTimeout(idleTimer);
+  if (get().showSuggestions || !get().suggestions.length) return;
+  idleTimer = setTimeout(() => {
+    const s = get();
+    if (s.phase === "listening" && !s.stopped && inputIsEmpty()) set({ showSuggestions: true });
+    else armIdleTimer();
+  }, IDLE_BEFORE_SUGGEST_MS);
+}
+
+export function setSuggestions(suggestions: string[] = []): void {
+  clearTimeout(idleTimer);
+  set({ suggestions, showSuggestions: false });
+}
+
+/** ヒントを選んだら、日本語メモ（言いたいこと）に入れる。あとは英語で話すだけ */
+export function pickSuggestion(text: string): void {
+  clearTimeout(idleTimer);
+  if (get().jaMode) setJaMode(false);
+  setField("memo", { committed: text, interim: "" });
+  set({ memoOpen: true, showSuggestions: false, hint: "英語で言ってみましょう" });
+}
+
 export function micOn(): void {
   if (get().stopped) return;
   if (!recognizer.available) set({ hint: "このブラウザは音声認識に対応していません（Chrome 推奨）。入力欄を使ってください。" });
   recognizer.lang = get().jaMode ? "ja-JP" : "en-US";
   recognizer.start();
   setPhase("listening");
+  armIdleTimer();
 }
 
 export function micOff(): void {
   clearTimeout(silenceTimer);
+  clearTimeout(idleTimer);
   recognizer.stop();
 }
 
@@ -88,6 +125,7 @@ export const micListening = () => recognizer.listening;
 /** ユーザーが入力欄を手で編集した */
 export function editField(name: FieldName, value: string): void {
   setField(name, { committed: value, interim: "" });
+  armIdleTimer();
   if (name === "input") {
     if (voice.used) voice.edited = true;
     clearTimeout(silenceTimer);
@@ -147,6 +185,8 @@ export function sendReply(): void {
     fields: { input: { committed: "", interim: "" }, memo: { committed: "", interim: "" } },
     memoOpen: false,
     autoSend: s.autoSendPref,
+    showSuggestions: false,
+    hint: "",
   });
   micOff();
   setPhase("thinking");

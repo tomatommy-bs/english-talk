@@ -1,4 +1,4 @@
-import { clearInput, clearMemo, editField, sendReply, setAutoSendPref, setJaMode } from "../lib/session";
+import { clearInput, clearMemo, editField, pickSuggestion, sendReply, setAutoSendPref, setJaMode } from "../lib/session";
 import { fieldText, useStore } from "../lib/store";
 
 const field = "min-w-0 flex-1 rounded-md border border-line bg-bg px-2.5 py-1.5";
@@ -11,9 +11,27 @@ export function Composer() {
   const jaMode = useStore((s) => s.jaMode);
   const autoSend = useStore((s) => s.autoSend);
   const hint = useStore((s) => s.hint);
+  const suggestions = useStore((s) => (s.showSuggestions ? s.suggestions : null));
 
   return (
     <div className="flex flex-col gap-1.5 border-t border-line bg-surface px-4 py-2.5">
+      {suggestions && suggestions.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted">💡 こんなふうに返してみては？（選ぶと日本語メモに入ります）</span>
+          <div className="flex flex-wrap gap-1.5">
+            {suggestions.map((text) => (
+              <button
+                key={text}
+                type="button"
+                className="rounded-full border border-accent px-3 py-1 text-left text-[13px] text-accent hover:bg-accent hover:text-white"
+                onClick={() => pickSuggestion(text)}
+              >
+                {text}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {memoOpen && (
         <div className="flex items-center gap-1.5">
           <span className="w-[34px] shrink-0 text-center">🇯🇵</span>

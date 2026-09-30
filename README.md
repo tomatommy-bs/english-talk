@@ -137,7 +137,7 @@ curl -fsSL -o .claude/commands/english.md \
 | ツール | 内容 |
 |---|---|
 | `start_session({scenario, level})` | 画面の初期化 |
-| `say_and_listen({reply, reply_ja, feedback, good})` | FB を表示 → reply を読み上げ（reply_ja は「訳」ボタンで表示）→ 次のイベントを待って返す |
+| `say_and_listen({reply, reply_ja, feedback, good, suggestions_ja})` | FB を表示 → reply を読み上げ（reply_ja は「訳」ボタンで表示）→ 次のイベントを待って返す。suggestions_ja は黙っていると出る返答のヒント |
 | `listen()` | 次のイベントをさらに待つ |
 | `answer_lookup({id, meaning})` | 選択された表現の意味をポップアップに表示 |
 | `end_session({summary})` | まとめを表示 |
@@ -150,6 +150,7 @@ curl -fsSL -o .claude/commands/english.md \
 - 音声は入力欄に入る。「自動送信」がオンなら話し終わりで送信。入力欄を手で触るとそのターンだけ自動送信オフ
 - ✕（または Esc）で入力中の内容を消す
 - 🇯🇵 で先に日本語で言いたいことを記録 → EN で英語に切り替えて話す
+- 8 秒ほど黙っていると 💡 返答のヒント（日本語）が出る。選ぶと日本語メモに入るので、それを英語で言う
 
 webmcp のブリッジはツール呼び出しを 30 秒で打ち切るため、待つツールは 25 秒で `status: "waiting"` を返し、Claude が `listen` で待ち直す。
 

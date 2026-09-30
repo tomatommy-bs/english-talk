@@ -11,6 +11,7 @@ import {
   micOn,
   preloadVoice,
   setPhase,
+  setSuggestions,
   speak,
   stoppedEvent,
   waitingEvent,
@@ -84,15 +85,33 @@ export function registerTools(): WebMCP {
         reply_ja: { type: "string", description: "reply の自然な日本語訳" },
         feedback: FEEDBACK_SCHEMA,
         good: { type: "string", description: "よかった点があれば日本語で一言（任意）" },
+        suggestions_ja: {
+          type: "array",
+          items: { type: "string" },
+          description: "ユーザーが返答に詰まったときに出す、返答の例（日本語で 2〜3 個）。選ぶと「言いたいこと」になり、ユーザーはそれを英語で言う",
+        },
       },
       required: ["reply", "reply_ja"],
     },
-    async ({ reply, reply_ja, feedback, good }: { reply: string; reply_ja?: string; feedback?: FeedbackItem[]; good?: string }) => {
+    async ({
+      reply,
+      reply_ja,
+      feedback,
+      good,
+      suggestions_ja,
+    }: {
+      reply: string;
+      reply_ja?: string;
+      feedback?: FeedbackItem[];
+      good?: string;
+      suggestions_ja?: string[];
+    }) => {
       const deadline = Date.now() + TOOL_BUDGET_MS;
       if (get().stopped) return result(stoppedEvent());
       if (feedback?.length || good) addFeedback(feedback, good);
       micOff();
       addMessage("ai", reply, reply_ja);
+      setSuggestions(suggestions_ja);
       setPhase("speaking");
       // 読み上げが長引いても 25 秒枠は守る。読み上げ終了後にマイクを開く
       const spoken = speak(reply).then(() => micOn());
